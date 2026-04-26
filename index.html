@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Newton Method Visualizer</title>
+
+  <!-- KaTeX -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body, {
+            delimiters: [
+              {left: '$$', right: '$$', display: true},
+              {left: '$', right: '$', display: false}
+            ]
+          });"></script>
+
+  <!-- Prism.js syntax highlighting (Nord theme) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prism-themes@1.9.0/themes/prism-nord.css" />
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
+
+  <style>
+    :root {
+      --nord0:  #2E3440;
+      --nord1:  #3B4252;
+      --nord2:  #434C5E;
+      --nord3:  #4C566A;
+      --nord4:  #D8DEE9;
+      --nord5:  #E5E9F0;
+      --nord6:  #ECEFF4;
+      --nord7:  #8FBCBB;
+      --nord8:  #88C0D0;
+      --nord9:  #81A1C1;
+      --nord10: #5E81AC;
+      --nord11: #BF616A;
+      --nord12: #D08770;
+      --nord13: #EBCB8B;
+      --nord14: #A3BE8C;
+      --nord15: #B48EAD;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--nord0);
+      color: var(--nord4);
+      font-family: 'JetBrains Mono', 'Fira Code', monospace, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 1.25rem;
+      background: var(--nord1);
+      border-bottom: 1px solid var(--nord3);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    header h1 {
+      font-size: 0.95rem;
+      color: var(--nord8);
+      letter-spacing: 0.05em;
+    }
+
+    header .header-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .main-layout {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Canvas side ── */
+    #canvas-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #main-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #canvas-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #diverge-banner {
+      display: none;
+      background: rgba(191, 97, 106, 0.92);
+      border: 1px solid var(--nord11);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      text-align: center;
+      max-width: 340px;
+      color: var(--nord6);
+      font-size: 0.88rem;
+      line-height: 1.6;
+    }
+
+    #diverge-banner.visible { display: block; }
+    #diverge-banner strong { display: block; font-size: 1rem; margin-bottom: 0.4rem; }
+
+    /* ── Control panel ── */
+    #panel {
+      width: 300px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--nord1);
+      border-left: 1px solid var(--nord3);
+      overflow-y: auto;
+    }
+
+    .panel-section {
+      padding: 1rem;
+      border-bottom: 1px solid var(--nord2);
+    }
+
+    .panel-section h3 {
+      font-size: 0.75rem;
+      color: var(--nord9);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.75rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--nord4);
+      margin-bottom: 0.25rem;
+    }
+
+    select, input[type="range"] {
+      width: 100%;
+      margin-bottom: 0.75rem;
+    }
+
+    select {
+      background: var(--nord2);
+      color: var(--nord6);
+      border: 1px solid var(--nord3);
+      border-radius: 6px;
+      padding: 0.4rem 0.6rem;
+      font: inherit;
+      font-size: 0.82rem;
+    }
+
+    input[type="range"] {
+      accent-color: var(--nord8);
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .slider-row input { flex: 1; margin: 0; }
+    .slider-row span {
+      width: 52px;
+      text-align: right;
+      font-size: 0.82rem;
+      color: var(--nord13);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      border: 1px solid var(--nord3);
+      border-radius: 999px;
+      background: var(--nord2);
+      color: var(--nord6);
+      padding: 0.4rem 0.85rem;
+      font: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn:hover { background: var(--nord3); }
+    .btn.primary { background: var(--nord10); border-color: var(--nord9); }
+    .btn.primary:hover { background: var(--nord9); }
+    .btn.danger  { background: var(--nord11); border-color: var(--nord11); }
+    .btn.danger:hover  { background: #a0505a; }
+    .btn.icon { font-size: 1rem; padding: 0.4rem 0.7rem; }
+
+    .btn-row {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+    }
+
+    /* Residual meter */
+    #residual-section { }
+
+    .residual-bar-track {
+      height: 10px;
+      background: var(--nord2);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 0.4rem;
+    }
+
+    #residual-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--nord14);
+      border-radius: 999px;
+      transition: width 0.3s, background 0.3s;
+    }
+
+    #residual-bar.converged { background: var(--nord13); }
+
+    #residual-value {
+      font-size: 0.8rem;
+      color: var(--nord13);
+      text-align: right;
+    }
+
+    /* Iteration table */
+    #iter-table-wrap {
+      overflow-x: auto;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--nord2);
+      color: var(--nord9);
+      padding: 0.3rem 0.5rem;
+      text-align: right;
+    }
+
+    th:first-child { text-align: center; }
+
+    td {
+      padding: 0.28rem 0.5rem;
+      text-align: right;
+      color: var(--nord4);
+      border-top: 1px solid var(--nord2);
+    }
+
+    td:first-child { text-align: center; color: var(--nord9); }
+
+    tr.quadratic td { color: var(--nord13); }
+
+    /* Status line */
+    #status-line {
+      font-size: 0.8rem;
+      color: var(--nord9);
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--nord2);
+      min-height: 2rem;
+    }
+
+    #status-line.warn { color: var(--nord11); }
+    #status-line.ok   { color: var(--nord14); }
+
+    /* Math modal */
+    #math-modal[hidden] { display: none; }
+
+    #math-modal {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(46, 52, 64, 0.82);
+      z-index: 100;
+    }
+
+    .modal-panel {
+      width: min(740px, calc(100vw - 2rem));
+      max-height: calc(100vh - 2rem);
+      overflow: auto;
+      background: var(--nord1);
+      border: 1px solid var(--nord3);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      padding: 1.25rem;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .modal-header h2 { font-size: 1rem; color: var(--nord8); }
+
+    .modal-actions { display: flex; gap: 0.5rem; align-items: center; }
+
+    .modal-body {
+      display: grid;
+      gap: 0.85rem;
+      line-height: 1.75;
+      color: var(--nord5);
+      font-size: 0.88rem;
+    }
+
+    .modal-body pre[class*="language-"] {
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      margin: 0;
+    }
+
+    .katex-display { overflow-x: auto; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Newton Method Visualizer</h1>
+    <div class="header-actions">
+      <button class="btn icon" id="open-math" aria-haspopup="dialog" aria-controls="math-modal" aria-label="Math explanation">💡</button>
+    </div>
+  </header>
+
+  <div class="main-layout">
+    <!-- Left: canvas -->
+    <div id="canvas-container">
+      <canvas id="main-canvas"></canvas>
+      <div id="canvas-overlay">
+        <div id="diverge-banner">
+          <strong>⚠ Divergence Detected</strong>
+          The iteration has left the visible domain. This typically occurs when the initial point is in a flat region where $f'(x) \approx 0$, or the function has no root nearby.
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: control panel -->
+    <div id="panel">
+      <div id="status-line">Ready</div>
+
+      <div class="panel-section">
+        <h3>Function</h3>
+        <label for="fn-select">Select preset</label>
+        <select id="fn-select">
+          <option value="sqrt2">√2  —  f(x) = x² − 2</option>
+          <option value="cubic">Cubic  —  f(x) = x³ − x − 2</option>
+          <option value="trig">Trig  —  f(x) = cos(x) − x</option>
+          <option value="oscillate">Oscillate  —  f(x) = sin(10x) · x</option>
+          <option value="flat">Flat trap  —  f(x) = x³ − 3x + 2</option>
+        </select>
+
+        <label for="x0-slider">Initial value $x_0$</label>
+        <div class="slider-row">
+          <input type="range" id="x0-slider" min="-5" max="5" step="0.05" value="2" />
+          <span id="x0-display">2.00</span>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3>Controls</h3>
+        <div class="btn-row">
+          <button class="btn primary" id="btn-next">Next Step</button>
+          <button class="btn" id="btn-auto">▶ Auto</button>
+          <button class="btn" id="btn-undo">↩ Undo</button>
+          <button class="btn danger" id="btn-reset">Reset</button>
+        </div>
+      </div>
+
+      <div class="panel-section" id="residual-section">
+        <h3>Residual $|f(x_n)|$</h3>
+        <div class="residual-bar-track">
+          <div id="residual-bar"></div>
+        </div>
+        <div id="residual-value">—</div>
+      </div>
+
+      <div class="panel-section">
+        <h3>Iteration Log</h3>
+        <div id="iter-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>n</th>
+                <th>xₙ</th>
+                <th>f(xₙ)</th>
+                <th>Δx</th>
+              </tr>
+            </thead>
+            <tbody id="iter-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Math modal -->
+  <div id="math-modal" role="dialog" aria-modal="true" aria-labelledby="math-title" hidden>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="math-title">Math Behind the Scene</h2>
+        <div class="modal-actions">
+          <button class="btn" id="language-toggle">Eng / 中</button>
+          <button class="btn" id="close-math" aria-label="Close">Close</button>
+        </div>
+      </div>
+      <div id="math-content" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
