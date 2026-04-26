@@ -1,5 +1,9 @@
 // Newton Method Visualizer — main.js
-// Canvas-based 2D renderer (no Three.js needed for 2D plotting)
+import {
+  init3D, step3D, undo3D, reset3D, loadPreset3D,
+  setP0_3D, resize3D, PRESETS_3D,
+  getCamDist, setCamDist, onControlsChange,
+} from './scene3d.js';
 
 /** @type {HTMLCanvasElement} */
 const canvas = document.getElementById('main-canvas');
@@ -27,6 +31,30 @@ const zoomSlider     = document.getElementById('zoom-slider');
 const zoomLabel      = document.getElementById('zoom-label');
 const btnZoomIn      = document.getElementById('btn-zoom-in');
 const btnZoomOut     = document.getElementById('btn-zoom-out');
+
+// ── 3D DOM refs ───────────────────────────────────────────────────────────────
+const btnMode        = document.getElementById('btn-mode');
+const canvas3d       = document.getElementById('canvas-3d');
+const zoomHud        = document.getElementById('zoom-hud');
+const panel2dContent = document.getElementById('panel-2d-content');
+const panel3dContent = document.getElementById('panel-3d-content');
+const fnSelect3d     = document.getElementById('fn-select-3d');
+const x03dSlider     = document.getElementById('x0-3d-slider');
+const y03dSlider     = document.getElementById('y0-3d-slider');
+const x03dDisplay    = document.getElementById('x0-3d-display');
+const y03dDisplay    = document.getElementById('y0-3d-display');
+const btnNext3d      = document.getElementById('btn-next-3d');
+const btnAuto3d      = document.getElementById('btn-auto-3d');
+const btnUndo3d      = document.getElementById('btn-undo-3d');
+const btnReset3d     = document.getElementById('btn-reset-3d');
+const j00El          = document.getElementById('j00');
+const j01El          = document.getElementById('j01');
+const j10El          = document.getElementById('j10');
+const j11El          = document.getElementById('j11');
+const jacobianDet    = document.getElementById('jacobian-det');
+const residualBar3d  = document.getElementById('residual-bar-3d');
+const residualVal3d  = document.getElementById('residual-value-3d');
+const iterTbody3d    = document.getElementById('iter-tbody-3d');
 
 // ── Nord palette ──────────────────────────────────────────────────────────────
 const C = {
@@ -86,6 +114,9 @@ const PRESETS = {
 };
 
 // ── State ─────────────────────────────────────────────────────────────────────
+let appMode = '2d'; // '2d' | '3d'
+let autoTimer3d = null;
+
 /** @type {{cx:number,cy:number,scale:number}} */
 let view = { cx: 1.5, cy: 0, scale: 80 };
 
@@ -109,7 +140,8 @@ function resize() {
   const container = canvas.parentElement;
   canvas.width  = container.clientWidth;
   canvas.height = container.clientHeight;
-  draw();
+  if (appMode === '2d') draw();
+  else resize3D(canvas3d);
 }
 window.addEventListener('resize', resize);
 
@@ -617,6 +649,7 @@ canvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 // ── Zoom HUD ──────────────────────────────────────────────────────────────────
+// ── Zoom HUD — 2D ─────────────────────────────────────────────────────────────
 const SCALE_MIN = 10;
 const SCALE_MAX = 4000;
 
@@ -630,28 +663,59 @@ function sliderToScale(v) {
 
 function syncZoomHud() {
   zoomSlider.value = scaleToSlider(view.scale);
-  // display relative to the default scale of 80
   zoomLabel.textContent = `${(view.scale / 80).toFixed(1)}×`;
 }
 
+// ── Zoom HUD — 3D ─────────────────────────────────────────────────────────────
+const DIST_MIN     = 2;
+const DIST_MAX     = 18;
+const DIST_DEFAULT = Math.sqrt(6 * 6 + 5 * 5 + 6 * 6); // initial camera position length ≈ 9.85
+
+function distToSlider(d) {
+  return Math.round(1 + 99 * Math.log(d / DIST_MIN) / Math.log(DIST_MAX / DIST_MIN));
+}
+
+function sliderToDist(v) {
+  return DIST_MIN * Math.pow(DIST_MAX / DIST_MIN, (v - 1) / 99);
+}
+
+function syncZoomHud3d() {
+  const d = getCamDist();
+  zoomSlider.value = distToSlider(Math.min(Math.max(d, DIST_MIN), DIST_MAX));
+  zoomLabel.textContent = `${(DIST_DEFAULT / d).toFixed(1)}×`;
+}
+
+// ── Zoom HUD — unified event handlers ─────────────────────────────────────────
 zoomSlider.addEventListener('input', () => {
-  const center = { x: view.cx, y: view.cy };
-  view.scale = sliderToScale(parseInt(zoomSlider.value, 10));
-  // keep the view centred on the same world point
-  view.cx = center.x;
-  view.cy = center.y;
-  zoomLabel.textContent = `${(view.scale / 80).toFixed(1)}×`;
-  draw();
+  const v = parseInt(zoomSlider.value, 10);
+  if (appMode === '2d') {
+    const center = { x: view.cx, y: view.cy };
+    view.scale = sliderToScale(v);
+    view.cx = center.x;
+    view.cy = center.y;
+    zoomLabel.textContent = `${(view.scale / 80).toFixed(1)}×`;
+    draw();
+  } else {
+    const d = sliderToDist(v);
+    setCamDist(d);
+    zoomLabel.textContent = `${(DIST_DEFAULT / d).toFixed(1)}×`;
+  }
 });
 
 function zoomStep(factor) {
-  const cx = view.cx;
-  const cy = view.cy;
-  view.scale = Math.min(Math.max(view.scale * factor, SCALE_MIN), SCALE_MAX);
-  view.cx    = cx;
-  view.cy    = cy;
-  syncZoomHud();
-  draw();
+  if (appMode === '2d') {
+    const cx = view.cx;
+    const cy = view.cy;
+    view.scale = Math.min(Math.max(view.scale * factor, SCALE_MIN), SCALE_MAX);
+    view.cx = cx;
+    view.cy = cy;
+    syncZoomHud();
+    draw();
+  } else {
+    const newDist = Math.min(Math.max(getCamDist() / factor, DIST_MIN), DIST_MAX);
+    setCamDist(newDist);
+    syncZoomHud3d();
+  }
 }
 
 btnZoomIn.addEventListener('click',  () => zoomStep(1.25));
@@ -695,7 +759,7 @@ btnUndo.addEventListener('click', () => {
 btnReset.addEventListener('click', resetAll);
 
 // ── Math modal ─────────────────────────────────────────────────────────────────
-const MODAL_COPY = {
+const MODAL_COPY_2D = {
   en: `
     <p>Newton's method finds a root of $f(x) = 0$ by linearising the function at each iterate.</p>
     <p>Given $x_n$, draw the tangent to the curve at $(x_n,\\, f(x_n))$:</p>
@@ -722,8 +786,44 @@ x = x + dx;</code></pre>
   `,
 };
 
+const MODAL_COPY_3D = {
+  en: `
+    <p>In 3D mode we solve a <strong>nonlinear system</strong> $\mathbf{F}(\mathbf{x}) = \mathbf{0}$ where $\mathbf{x} = (x,y)^T$ and $\mathbf{F}: \mathbb{R}^2 \to \mathbb{R}^2$.</p>
+    <p>The two coloured surfaces show $z = f_1(x,y)$ and $z = f_2(x,y)$. A solution lives where <em>both</em> surfaces simultaneously touch the $z=0$ plane.</p>
+    <p>The Newton update replaces the scalar derivative with the <strong>Jacobian matrix</strong>:</p>
+    <p>$$J(\mathbf{x}_n) = \begin{bmatrix} \partial f_1/\partial x & \partial f_1/\partial y \\ \partial f_2/\partial x & \partial f_2/\partial y \end{bmatrix}$$</p>
+    <p>Each step solves the linear system $J(\mathbf{x}_n)\,\Delta\mathbf{x} = -\mathbf{F}(\mathbf{x}_n)$ and updates:</p>
+    <p>$$\mathbf{x}_{n+1} = \mathbf{x}_n + \Delta\mathbf{x}$$</p>
+    <p>For a $2\times2$ system the solution uses <strong>Cramer's rule</strong> with $\det J = ad - bc$:</p>
+    <p>$$\Delta x = \frac{-(d\,f_1 - b\,f_2)}{\det J}, \quad \Delta y = \frac{-(-c\,f_1 + a\,f_2)}{\det J}$$</p>
+    <p>Quadratic convergence still holds: $\|\mathbf{e}_{n+1}\| \leq C\|\mathbf{e}_n\|^2$ when $J$ is non-singular near the root.</p>
+    <pre><code class="language-js">// 2×2 Newton step (Cramer's rule)
+const [[a,b],[c,d]] = J([x,y]);
+const det = a*d - b*c;
+const dx  = -(d*F[0] - b*F[1]) / det;
+const dy  = -(-c*F[0] + a*F[1]) / det;</code></pre>
+  `,
+  zhTW: `
+    <p>3D 模式下，我們求解一個<strong>非線性方程組</strong> $\mathbf{F}(\mathbf{x}) = \mathbf{0}$，其中 $\mathbf{x} = (x,y)^T$，$\mathbf{F}: \mathbb{R}^2 \to \mathbb{R}^2$。</p>
+    <p>兩個彩色曲面分別顯示 $z = f_1(x,y)$ 與 $z = f_2(x,y)$。解即為兩曲面<em>同時</em>與 $z=0$ 平面相交之點。</p>
+    <p>牛頓法將純量導數推廣為<strong>Jacobian 矩陣</strong>：</p>
+    <p>$$J(\mathbf{x}_n) = \begin{bmatrix} \partial f_1/\partial x & \partial f_1/\partial y \\ \partial f_2/\partial x & \partial f_2/\partial y \end{bmatrix}$$</p>
+    <p>每步求解線性系統 $J(\mathbf{x}_n)\,\Delta\mathbf{x} = -\mathbf{F}(\mathbf{x}_n)$，再更新：</p>
+    <p>$$\mathbf{x}_{n+1} = \mathbf{x}_n + \Delta\mathbf{x}$$</p>
+    <p>對 $2\times2$ 系統，可直接用 Cramer 法則，行列式 $\det J = ad - bc$：</p>
+    <p>$$\Delta x = \frac{-(d\,f_1 - b\,f_2)}{\det J}, \quad \Delta y = \frac{-(-c\,f_1 + a\,f_2)}{\det J}$$</p>
+    <p>當 $J$ 在根附近非奇異時，仍保有二階收斂：$\|\mathbf{e}_{n+1}\| \leq C\|\mathbf{e}_n\|^2$。</p>
+    <pre><code class="language-js">// 2×2 牛頓步（Cramer 法則）
+const [[a,b],[c,d]] = J([x,y]);
+const det = a*d - b*c;
+const dx  = -(d*F[0] - b*F[1]) / det;
+const dy  = -(-c*F[0] + a*F[1]) / det;</code></pre>
+  `,
+};
+
 function renderModal() {
-  mathContent.innerHTML = MODAL_COPY[modalLang];
+  const copy = appMode === '3d' ? MODAL_COPY_3D : MODAL_COPY_2D;
+  mathContent.innerHTML = copy[modalLang];
   if (window.renderMathInElement) {
     window.renderMathInElement(mathContent, {
       delimiters: [
@@ -757,10 +857,181 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') mathModal.hidden = true;
     return;
   }
-  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); triggerNextStep(); }
-  if (e.key === 'ArrowLeft')  { e.preventDefault(); btnUndo.click(); }
-  if (e.key === 'r' || e.key === 'R') resetAll();
-  if (e.key === 'a' || e.key === 'A') btnAuto.click();
+  if (appMode === '2d') {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); triggerNextStep(); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); btnUndo.click(); }
+    if (e.key === 'r' || e.key === 'R') resetAll();
+    if (e.key === 'a' || e.key === 'A') btnAuto.click();
+  }
+});
+
+// ── 3D UI helpers ─────────────────────────────────────────────────────────────
+function updateJacobian(J, det) {
+  if (!J) {
+    j00El.textContent = j01El.textContent = j10El.textContent = j11El.textContent = '—';
+    jacobianDet.textContent = 'det J = —';
+    return;
+  }
+  j00El.textContent = J[0][0].toFixed(4);
+  j01El.textContent = J[0][1].toFixed(4);
+  j10El.textContent = J[1][0].toFixed(4);
+  j11El.textContent = J[1][1].toFixed(4);
+  jacobianDet.textContent = `det J = ${det.toFixed(4)}`;
+}
+
+function updateResidual3d(F) {
+  const norm = Math.hypot(F[0], F[1]);
+  const MAX_LOG = 3;
+  const logVal  = Math.log10(Math.max(norm, 1e-12));
+  const pct     = Math.max(0, Math.min(1, (-logVal) / (MAX_LOG + 12)));
+  residualBar3d.style.width = `${pct * 100}%`;
+  residualVal3d.textContent = `|F| = ${norm.toExponential(4)}`;
+  residualBar3d.classList.toggle('converged', norm < 1e-8);
+}
+
+function appendTableRow3d(n, x, y, F) {
+  const norm = Math.hypot(F[0], F[1]);
+  const row  = document.createElement('tr');
+  row.innerHTML = `<td>${n}</td><td>${x.toPrecision(6)}</td><td>${y.toPrecision(6)}</td><td>${norm.toExponential(3)}</td>`;
+  iterTbody3d.prepend(row);
+}
+
+function setStatus3d(msg, cls = '') {
+  statusLine.textContent = msg;
+  statusLine.className   = cls;
+}
+
+function resetPanel3d() {
+  iterTbody3d.innerHTML = '';
+  residualBar3d.style.width = '0%';
+  residualVal3d.textContent = '—';
+  updateJacobian(null, 0);
+  setStatus3d('Ready');
+}
+
+// ── 3D step / auto ────────────────────────────────────────────────────────────
+function triggerNext3D() {
+  const result = step3D();
+  if (!result.ok) {
+    if (result.err === 'singular') setStatus3d('⚠ Jacobian singular — cannot step.', 'warn');
+    if (result.err === 'diverge')  setStatus3d('⚠ Divergence detected.', 'warn');
+    stopAuto3D();
+    return;
+  }
+  const { x, y, F, J, det, n } = result.data;
+  updateJacobian(J, det);
+  updateResidual3d(F);
+  appendTableRow3d(n, x, y, F);
+  const norm = Math.hypot(F[0], F[1]);
+  if (norm < 1e-8) {
+    setStatus3d(`Converged ✓  (${x.toPrecision(6)}, ${y.toPrecision(6)})`, 'ok');
+    stopAuto3D();
+  } else {
+    setStatus3d(`x${n} = (${x.toPrecision(5)}, ${y.toPrecision(5)})   |F| = ${norm.toExponential(3)}`);
+  }
+}
+
+function startAuto3D() {
+  if (autoTimer3d) return;
+  btnAuto3d.textContent = '⏸ Pause';
+  autoTimer3d = setInterval(triggerNext3D, 1000);
+}
+
+function stopAuto3D() {
+  if (!autoTimer3d) return;
+  clearInterval(autoTimer3d);
+  autoTimer3d = null;
+  btnAuto3d.textContent = '▶ Auto';
+}
+
+// ── Mode switch ───────────────────────────────────────────────────────────────
+function switchMode(mode) {
+  appMode = mode;
+  const is3d = mode === '3d';
+
+  // canvas visibility
+  canvas.style.display   = is3d ? 'none' : 'block';
+  canvas3d.style.display = is3d ? 'block' : 'none';
+
+  // panel content
+  panel2dContent.hidden = is3d;
+  panel3dContent.hidden = !is3d;
+
+  // header button label
+  btnMode.textContent = is3d ? '2D' : '3D';
+  btnMode.setAttribute('aria-label', is3d ? 'Switch to 2D mode' : 'Switch to 3D mode');
+
+  if (is3d) {
+    stopAuto();
+    // Slight delay so canvas-3d has proper dimensions after becoming visible
+    requestAnimationFrame(() => {
+      init3D(canvas3d);
+      loadPreset3D(
+        fnSelect3d.value,
+        parseFloat(x03dSlider.value),
+        parseFloat(y03dSlider.value),
+      );
+      resetPanel3d();
+      onControlsChange(syncZoomHud3d);
+      syncZoomHud3d();
+    });
+  } else {
+    stopAuto3D();
+    resize();
+    syncZoomHud();
+    draw();
+  }
+}
+
+btnMode.addEventListener('click', () => switchMode(appMode === '2d' ? '3d' : '2d'));
+
+// ── 3D control wiring ─────────────────────────────────────────────────────────
+fnSelect3d.addEventListener('change', () => {
+  const preset = PRESETS_3D[fnSelect3d.value];
+  x03dSlider.value = preset.p0[0];
+  y03dSlider.value = preset.p0[1];
+  x03dDisplay.textContent = preset.p0[0].toFixed(2);
+  y03dDisplay.textContent = preset.p0[1].toFixed(2);
+  reset3D(fnSelect3d.value, preset.p0[0], preset.p0[1]);
+  resetPanel3d();
+});
+
+x03dSlider.addEventListener('input', () => {
+  const v = parseFloat(x03dSlider.value);
+  x03dDisplay.textContent = v.toFixed(2);
+  setP0_3D(v, parseFloat(y03dSlider.value));
+});
+
+y03dSlider.addEventListener('input', () => {
+  const v = parseFloat(y03dSlider.value);
+  y03dDisplay.textContent = v.toFixed(2);
+  setP0_3D(parseFloat(x03dSlider.value), v);
+});
+
+btnNext3d.addEventListener('click', triggerNext3D);
+
+btnAuto3d.addEventListener('click', () => {
+  if (autoTimer3d) stopAuto3D();
+  else startAuto3D();
+});
+
+btnUndo3d.addEventListener('click', () => {
+  stopAuto3D();
+  const result = undo3D();
+  iterTbody3d.querySelector('tr')?.remove();
+  if (result) {
+    updateJacobian(result.J, result.det);
+    updateResidual3d(result.F);
+    setStatus3d(`x${result.n} = (${result.x.toPrecision(5)}, ${result.y.toPrecision(5)})`);
+  } else {
+    resetPanel3d();
+  }
+});
+
+btnReset3d.addEventListener('click', () => {
+  stopAuto3D();
+  reset3D(fnSelect3d.value, parseFloat(x03dSlider.value), parseFloat(y03dSlider.value));
+  resetPanel3d();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

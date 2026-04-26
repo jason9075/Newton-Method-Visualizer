@@ -21,6 +21,15 @@
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
 
+  <script type="importmap">
+  {
+    "imports": {
+      "three":          "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+      "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+    }
+  }
+  </script>
+
   <style>
     :root {
       --nord0:  #2E3440;
@@ -281,7 +290,41 @@
       transition: width 0.3s, background 0.3s;
     }
 
-    #residual-bar.converged { background: var(--nord13); }
+    #residual-bar.converged    { background: var(--nord13); }
+    #residual-bar-3d           { height:100%; width:0%; background:var(--nord14); border-radius:999px; transition:width .3s,background .3s; }
+    #residual-bar-3d.converged { background: var(--nord13); }
+
+    /* Panel 2D / 3D content containers */
+    #panel-2d-content, #panel-3d-content {
+      display: flex;
+      flex-direction: column;
+    }
+    #panel-2d-content[hidden], #panel-3d-content[hidden] { display: none; }
+
+    /* Jacobian matrix display */
+    .matrix-display {
+      display: flex;
+      justify-content: center;
+      margin: 0.5rem 0 0.25rem;
+      font-size: 0.8rem;
+    }
+    .matrix-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      padding: 0.3rem 0.6rem;
+      border-left:  2px solid var(--nord9);
+      border-right: 2px solid var(--nord9);
+    }
+    .matrix-row {
+      display: flex;
+      gap: 1.2rem;
+    }
+    .matrix-row span {
+      min-width: 62px;
+      text-align: center;
+      color: var(--nord13);
+    }
 
     #residual-value {
       font-size: 0.8rem;
@@ -401,6 +444,7 @@
   <header>
     <h1>Newton Method Visualizer</h1>
     <div class="header-actions">
+      <button class="btn" id="btn-mode" aria-label="Switch to 3D mode">3D</button>
       <button class="btn icon" id="open-math" aria-haspopup="dialog" aria-controls="math-modal" aria-label="Math explanation">💡</button>
     </div>
   </header>
@@ -409,6 +453,7 @@
     <!-- Left: canvas -->
     <div id="canvas-container">
       <canvas id="main-canvas"></canvas>
+      <canvas id="canvas-3d" style="display:none; position:absolute; inset:0; width:100%; height:100%;"></canvas>
 
       <!-- Zoom HUD -->
       <div id="zoom-hud">
@@ -430,56 +475,121 @@
     <div id="panel">
       <div id="status-line">Ready</div>
 
-      <div class="panel-section">
-        <h3>Function</h3>
-        <label for="fn-select">Select preset</label>
-        <select id="fn-select">
-          <option value="sqrt2">√2  —  f(x) = x² − 2</option>
-          <option value="cubic">Cubic  —  f(x) = x³ − x − 2</option>
-          <option value="trig">Trig  —  f(x) = cos(x) − x</option>
-          <option value="oscillate">Oscillate  —  f(x) = sin(10x) · x</option>
-          <option value="flat">Flat trap  —  f(x) = x³ − 3x + 2</option>
-        </select>
+      <!-- ── 2D content ── -->
+      <div id="panel-2d-content">
+        <div class="panel-section">
+          <h3>Function</h3>
+          <label for="fn-select">Select preset</label>
+          <select id="fn-select">
+            <option value="sqrt2">√2  —  f(x) = x² − 2</option>
+            <option value="cubic">Cubic  —  f(x) = x³ − x − 2</option>
+            <option value="trig">Trig  —  f(x) = cos(x) − x</option>
+            <option value="oscillate">Oscillate  —  f(x) = sin(10x) · x</option>
+            <option value="flat">Flat trap  —  f(x) = x³ − 3x + 2</option>
+          </select>
 
-        <label for="x0-slider">Initial value $x_0$</label>
-        <div class="slider-row">
-          <input type="range" id="x0-slider" min="-5" max="5" step="0.05" value="2" />
-          <span id="x0-display">2.00</span>
+          <label for="x0-slider">Initial value $x_0$</label>
+          <div class="slider-row">
+            <input type="range" id="x0-slider" min="-5" max="5" step="0.05" value="2" />
+            <span id="x0-display">2.00</span>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h3>Controls</h3>
+          <div class="btn-row">
+            <button class="btn primary" id="btn-next">Next Step</button>
+            <button class="btn" id="btn-auto">▶ Auto</button>
+            <button class="btn" id="btn-undo">↩ Undo</button>
+            <button class="btn danger" id="btn-reset">Reset</button>
+          </div>
+        </div>
+
+        <div class="panel-section" id="residual-section">
+          <h3>Residual $|f(x_n)|$</h3>
+          <div class="residual-bar-track">
+            <div id="residual-bar"></div>
+          </div>
+          <div id="residual-value">—</div>
+        </div>
+
+        <div class="panel-section">
+          <h3>Iteration Log</h3>
+          <div id="iter-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>n</th><th>xₙ</th><th>f(xₙ)</th><th>Δx</th>
+                </tr>
+              </thead>
+              <tbody id="iter-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <div class="panel-section">
-        <h3>Controls</h3>
-        <div class="btn-row">
-          <button class="btn primary" id="btn-next">Next Step</button>
-          <button class="btn" id="btn-auto">▶ Auto</button>
-          <button class="btn" id="btn-undo">↩ Undo</button>
-          <button class="btn danger" id="btn-reset">Reset</button>
-        </div>
-      </div>
+      <!-- ── 3D content ── -->
+      <div id="panel-3d-content" hidden>
+        <div class="panel-section">
+          <h3>System</h3>
+          <label for="fn-select-3d">Select preset</label>
+          <select id="fn-select-3d">
+            <option value="circles">Circles — x²+y²=4, xy=1</option>
+            <option value="nonlinear">Nonlinear — x²−y=1, x+y²=1</option>
+            <option value="mixed">Mixed — sin(x)+y=0.5, x−cos(y)=0</option>
+          </select>
 
-      <div class="panel-section" id="residual-section">
-        <h3>Residual $|f(x_n)|$</h3>
-        <div class="residual-bar-track">
-          <div id="residual-bar"></div>
+          <label for="x0-3d-slider">Initial $x_0$</label>
+          <div class="slider-row">
+            <input type="range" id="x0-3d-slider" min="-2.5" max="2.5" step="0.05" value="1.5" />
+            <span id="x0-3d-display">1.50</span>
+          </div>
+          <label for="y0-3d-slider">Initial $y_0$</label>
+          <div class="slider-row">
+            <input type="range" id="y0-3d-slider" min="-2.5" max="2.5" step="0.05" value="0.5" />
+            <span id="y0-3d-display">0.50</span>
+          </div>
         </div>
-        <div id="residual-value">—</div>
-      </div>
 
-      <div class="panel-section">
-        <h3>Iteration Log</h3>
-        <div id="iter-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>n</th>
-                <th>xₙ</th>
-                <th>f(xₙ)</th>
-                <th>Δx</th>
-              </tr>
-            </thead>
-            <tbody id="iter-tbody"></tbody>
-          </table>
+        <div class="panel-section">
+          <h3>Controls</h3>
+          <div class="btn-row">
+            <button class="btn primary" id="btn-next-3d">Next Step</button>
+            <button class="btn" id="btn-auto-3d">▶ Auto</button>
+            <button class="btn" id="btn-undo-3d">↩ Undo</button>
+            <button class="btn danger" id="btn-reset-3d">Reset</button>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h3>Jacobian at $\mathbf{x}_n$</h3>
+          <div class="matrix-display">
+            <div class="matrix-inner">
+              <div class="matrix-row"><span id="j00">—</span><span id="j01">—</span></div>
+              <div class="matrix-row"><span id="j10">—</span><span id="j11">—</span></div>
+            </div>
+          </div>
+          <div id="jacobian-det" style="font-size:0.78rem;color:var(--nord9);text-align:center;">det J = —</div>
+        </div>
+
+        <div class="panel-section">
+          <h3>Residual $|\mathbf{F}(\mathbf{x}_n)|$</h3>
+          <div class="residual-bar-track">
+            <div id="residual-bar-3d"></div>
+          </div>
+          <div id="residual-value-3d" style="font-size:0.8rem;color:var(--nord13);text-align:right;">—</div>
+        </div>
+
+        <div class="panel-section">
+          <h3>Iteration Log</h3>
+          <div style="overflow-x:auto;max-height:200px;overflow-y:auto;">
+            <table>
+              <thead>
+                <tr><th>n</th><th>x</th><th>y</th><th>|F|</th></tr>
+              </thead>
+              <tbody id="iter-tbody-3d"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
