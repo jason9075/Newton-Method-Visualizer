@@ -23,6 +23,10 @@ const closeMathBtn   = document.getElementById('close-math');
 const langToggle     = document.getElementById('language-toggle');
 const mathModal      = document.getElementById('math-modal');
 const mathContent    = document.getElementById('math-content');
+const zoomSlider     = document.getElementById('zoom-slider');
+const zoomLabel      = document.getElementById('zoom-label');
+const btnZoomIn      = document.getElementById('btn-zoom-in');
+const btnZoomOut     = document.getElementById('btn-zoom-out');
 
 // ── Nord palette ──────────────────────────────────────────────────────────────
 const C = {
@@ -90,7 +94,6 @@ let history    = [];   // [{x, fx, dx}]
 let animPhase  = 0;    // 0=idle 1=drawing-tangent 2=drawing-proj
 let autoTimer  = null;
 let modalLang  = 'en';
-let isDragging = false;
 let showTangent = false;
 let showProj    = false;
 
@@ -499,6 +502,7 @@ function resetAll() {
   divergeBanner.classList.remove('visible');
   setStatus('Ready');
   view = { ...preset.view };
+  syncZoomHud();
   draw();
 }
 
@@ -523,32 +527,135 @@ function panTo(x, y) {
   view.cx    = targetCx;
   view.cy    = targetCy;
   view.scale = targetScale;
+  syncZoomHud();
 }
 
-// ── Drag x0 on canvas ─────────────────────────────────────────────────────────
+// ── Drag & Pan ─────────────────────────────────────────────────────────────────
+// dragMode: 'x0' = dragging initial point, 'pan' = panning the view, null = idle
+let dragMode  = null;
+let dragStart = { px: 0, py: 0, cx: 0, cy: 0 };
+
+/** Returns true if the canvas-pixel (ex, ey) is within 18px of the current dot. */
+function hitTestDot(ex, ey) {
+  if (history.length > 0) return false;
+  const x0  = parseFloat(x0Slider.value);
+  const dpx = ex - wx(x0);
+  const dpy = ey - wy(preset.f(x0));
+  return Math.hypot(dpx, dpy) < 18;
+}
+
+canvas.style.cursor = 'grab';
+
 canvas.addEventListener('mousedown', (e) => {
-  if (history.length > 0) return; // only drag before first step
-  isDragging = true;
+  if (e.button !== 0) return;
+  const rect = canvas.getBoundingClientRect();
+  const ex   = e.clientX - rect.left;
+  const ey   = e.clientY - rect.top;
+
+  if (hitTestDot(ex, ey)) {
+    dragMode = 'x0';
+    canvas.style.cursor = 'ew-resize';
+  } else {
+    dragMode  = 'pan';
+    dragStart = { px: e.clientX, py: e.clientY, cx: view.cx, cy: view.cy };
+    canvas.style.cursor = 'grabbing';
+  }
 });
 
 canvas.addEventListener('mousemove', (e) => {
-  if (!isDragging || history.length > 0) return;
   const rect = canvas.getBoundingClientRect();
-  const x = pw(e.clientX - rect.left);
-  const clamped = Math.min(5, Math.max(-5, x));
-  x0Slider.value = clamped;
-  x0Display.textContent = clamped.toFixed(2);
+  const ex   = e.clientX - rect.left;
+  const ey   = e.clientY - rect.top;
 
-  // live tangent preview
-  showTangent = true;
-  history = [{ x: clamped, fx: preset.f(clamped), dx: 0 }];
-  draw();
-  history = [];
-  showTangent = false;
+  if (!dragMode) {
+    canvas.style.cursor = hitTestDot(ex, ey) ? 'ew-resize' : 'grab';
+    return;
+  }
+
+  if (dragMode === 'x0') {
+    const x       = pw(ex);
+    const clamped = Math.min(5, Math.max(-5, x));
+    x0Slider.value            = clamped;
+    x0Display.textContent     = clamped.toFixed(2);
+
+    // live tangent preview without mutating real history
+    showTangent = true;
+    history = [{ x: clamped, fx: preset.f(clamped), dx: 0 }];
+    draw();
+    history     = [];
+    showTangent = false;
+  }
+
+  if (dragMode === 'pan') {
+    const ddx = (e.clientX - dragStart.px) / view.scale;
+    const ddy = (e.clientY - dragStart.py) / view.scale;
+    view.cx   = dragStart.cx - ddx;
+    view.cy   = dragStart.cy + ddy;
+    draw();
+  }
 });
 
-canvas.addEventListener('mouseup', () => { isDragging = false; });
-canvas.addEventListener('mouseleave', () => { isDragging = false; });
+canvas.addEventListener('mouseup',    () => { dragMode = null; canvas.style.cursor = 'grab'; });
+canvas.addEventListener('mouseleave', () => { dragMode = null; canvas.style.cursor = 'grab'; });
+
+// Pinch / scroll to zoom, anchored at the mouse cursor position
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect   = canvas.getBoundingClientRect();
+  const ex     = e.clientX - rect.left;
+  const ey     = e.clientY - rect.top;
+  // world coordinates under cursor before zoom
+  const mx     = pw(ex);
+  const my     = (canvas.height / 2 - ey) / view.scale + view.cy;
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  view.scale   = Math.min(Math.max(view.scale * factor, 10), 4000);
+  // shift origin so the point under cursor stays fixed
+  view.cx      = mx - (ex - canvas.width  / 2) / view.scale;
+  view.cy      = my - (canvas.height / 2 - ey) / view.scale;
+  syncZoomHud();
+  draw();
+}, { passive: false });
+
+// ── Zoom HUD ──────────────────────────────────────────────────────────────────
+const SCALE_MIN = 10;
+const SCALE_MAX = 4000;
+
+function scaleToSlider(s) {
+  return Math.round(1 + 99 * Math.log(s / SCALE_MIN) / Math.log(SCALE_MAX / SCALE_MIN));
+}
+
+function sliderToScale(v) {
+  return SCALE_MIN * Math.pow(SCALE_MAX / SCALE_MIN, (v - 1) / 99);
+}
+
+function syncZoomHud() {
+  zoomSlider.value = scaleToSlider(view.scale);
+  // display relative to the default scale of 80
+  zoomLabel.textContent = `${(view.scale / 80).toFixed(1)}×`;
+}
+
+zoomSlider.addEventListener('input', () => {
+  const center = { x: view.cx, y: view.cy };
+  view.scale = sliderToScale(parseInt(zoomSlider.value, 10));
+  // keep the view centred on the same world point
+  view.cx = center.x;
+  view.cy = center.y;
+  zoomLabel.textContent = `${(view.scale / 80).toFixed(1)}×`;
+  draw();
+});
+
+function zoomStep(factor) {
+  const cx = view.cx;
+  const cy = view.cy;
+  view.scale = Math.min(Math.max(view.scale * factor, SCALE_MIN), SCALE_MAX);
+  view.cx    = cx;
+  view.cy    = cy;
+  syncZoomHud();
+  draw();
+}
+
+btnZoomIn.addEventListener('click',  () => zoomStep(1.25));
+btnZoomOut.addEventListener('click', () => zoomStep(1 / 1.25));
 
 // ── Event wiring ───────────────────────────────────────────────────────────────
 fnSelect.addEventListener('change', (e) => loadPreset(e.target.value));
@@ -659,3 +766,4 @@ window.addEventListener('keydown', (e) => {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 resize();
 loadPreset('sqrt2');
+syncZoomHud();

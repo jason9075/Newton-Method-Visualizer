@@ -54,9 +54,10 @@
     }
 
     header {
+      position: relative;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       padding: 0.5rem 1.25rem;
       background: var(--nord1);
       border-bottom: 1px solid var(--nord3);
@@ -71,6 +72,8 @@
     }
 
     header .header-actions {
+      position: absolute;
+      right: 1.25rem;
       display: flex;
       gap: 0.5rem;
       align-items: center;
@@ -102,6 +105,49 @@
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+
+    /* ── Zoom HUD ── */
+    #zoom-hud {
+      position: absolute;
+      bottom: 1rem;
+      left: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.7rem;
+      background: rgba(59, 66, 82, 0.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--nord3);
+      border-radius: 999px;
+      z-index: 20;
+      user-select: none;
+    }
+
+    #zoom-hud .zoom-btn {
+      background: none;
+      border: none;
+      color: var(--nord6);
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0 0.1rem;
+      cursor: pointer;
+      opacity: 0.8;
+    }
+
+    #zoom-hud .zoom-btn:hover { opacity: 1; }
+
+    #zoom-slider {
+      width: 90px;
+      accent-color: var(--nord8);
+      cursor: pointer;
+    }
+
+    #zoom-label {
+      font-size: 0.72rem;
+      color: var(--nord8);
+      min-width: 3.2ch;
+      text-align: right;
     }
 
     #diverge-banner {
@@ -345,6 +391,13 @@
 </head>
 <body>
 
+  <a href="https://github.com/jason9075/Newton-Method-Visualizer" target="_blank" rel="noopener"
+     style="position:fixed;top:0;left:0;z-index:9999;">
+    <img loading="lazy" decoding="async" width="149" height="149"
+         src="https://github.blog/wp-content/uploads/2008/12/forkme_left_green_007200.png"
+         alt="Fork me on GitHub">
+  </a>
+
   <header>
     <h1>Newton Method Visualizer</h1>
     <div class="header-actions">
@@ -356,6 +409,15 @@
     <!-- Left: canvas -->
     <div id="canvas-container">
       <canvas id="main-canvas"></canvas>
+
+      <!-- Zoom HUD -->
+      <div id="zoom-hud">
+        <button class="zoom-btn" id="btn-zoom-out" aria-label="Zoom out">−</button>
+        <input type="range" id="zoom-slider" min="1" max="100" step="1" value="50" aria-label="Zoom level" />
+        <button class="zoom-btn" id="btn-zoom-in" aria-label="Zoom in">+</button>
+        <span id="zoom-label">1×</span>
+      </div>
+
       <div id="canvas-overlay">
         <div id="diverge-banner">
           <strong>⚠ Divergence Detected</strong>
