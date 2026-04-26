@@ -788,15 +788,14 @@ x = x + dx;</code></pre>
 
 const MODAL_COPY_3D = {
   en: `
-    <p>In 3D mode we solve a <strong>nonlinear system</strong> $\mathbf{F}(\mathbf{x}) = \mathbf{0}$ where $\mathbf{x} = (x,y)^T$ and $\mathbf{F}: \mathbb{R}^2 \to \mathbb{R}^2$.</p>
-    <p>The two coloured surfaces show $z = f_1(x,y)$ and $z = f_2(x,y)$. A solution lives where <em>both</em> surfaces simultaneously touch the $z=0$ plane.</p>
-    <p>The Newton update replaces the scalar derivative with the <strong>Jacobian matrix</strong>:</p>
-    <p>$$J(\mathbf{x}_n) = \begin{bmatrix} \partial f_1/\partial x & \partial f_1/\partial y \\ \partial f_2/\partial x & \partial f_2/\partial y \end{bmatrix}$$</p>
-    <p>Each step solves the linear system $J(\mathbf{x}_n)\,\Delta\mathbf{x} = -\mathbf{F}(\mathbf{x}_n)$ and updates:</p>
-    <p>$$\mathbf{x}_{n+1} = \mathbf{x}_n + \Delta\mathbf{x}$$</p>
-    <p>For a $2\times2$ system the solution uses <strong>Cramer's rule</strong> with $\det J = ad - bc$:</p>
-    <p>$$\Delta x = \frac{-(d\,f_1 - b\,f_2)}{\det J}, \quad \Delta y = \frac{-(-c\,f_1 + a\,f_2)}{\det J}$$</p>
-    <p>Quadratic convergence still holds: $\|\mathbf{e}_{n+1}\| \leq C\|\mathbf{e}_n\|^2$ when $J$ is non-singular near the root.</p>
+    <p>To find where two surfaces intersect the $z=0$ plane simultaneously, we solve the <strong>nonlinear system</strong> $\\mathbf{F}(\\mathbf{x}) = \\mathbf{0}$, where $\\mathbf{x} = (x, y)^T$.</p>
+    <p>Instead of a scalar derivative, Newton's method now uses the <strong>Jacobian matrix</strong> — a table of all partial derivatives:</p>
+    <p>$$J = \\begin{bmatrix} \\partial f_1/\\partial x & \\partial f_1/\\partial y \\\\ \\partial f_2/\\partial x & \\partial f_2/\\partial y \\end{bmatrix}$$</p>
+    <p>Each step asks: <em>"which direction moves both $f_1$ and $f_2$ toward zero?"</em> It solves $J\\,\\Delta\\mathbf{x} = -\\mathbf{F}$, then updates:</p>
+    <p>$$\\mathbf{x}_{n+1} = \\mathbf{x}_n + \\Delta\\mathbf{x}$$</p>
+    <p>For a $2 \\times 2$ system, the solution is computed via <strong>Cramer's rule</strong> ($\\det J = ad - bc$):</p>
+    <p>$$\\Delta x = \\frac{-(d\\,f_1 - b\\,f_2)}{\\det J}, \\qquad \\Delta y = \\frac{-(-c\\,f_1 + a\\,f_2)}{\\det J}$$</p>
+    <p>The method still converges <strong>quadratically</strong> — the number of correct digits roughly doubles each step — as long as $J$ is non-singular near the root.</p>
     <pre><code class="language-js">// 2×2 Newton step (Cramer's rule)
 const [[a,b],[c,d]] = J([x,y]);
 const det = a*d - b*c;
@@ -804,15 +803,14 @@ const dx  = -(d*F[0] - b*F[1]) / det;
 const dy  = -(-c*F[0] + a*F[1]) / det;</code></pre>
   `,
   zhTW: `
-    <p>3D 模式下，我們求解一個<strong>非線性方程組</strong> $\mathbf{F}(\mathbf{x}) = \mathbf{0}$，其中 $\mathbf{x} = (x,y)^T$，$\mathbf{F}: \mathbb{R}^2 \to \mathbb{R}^2$。</p>
-    <p>兩個彩色曲面分別顯示 $z = f_1(x,y)$ 與 $z = f_2(x,y)$。解即為兩曲面<em>同時</em>與 $z=0$ 平面相交之點。</p>
-    <p>牛頓法將純量導數推廣為<strong>Jacobian 矩陣</strong>：</p>
-    <p>$$J(\mathbf{x}_n) = \begin{bmatrix} \partial f_1/\partial x & \partial f_1/\partial y \\ \partial f_2/\partial x & \partial f_2/\partial y \end{bmatrix}$$</p>
-    <p>每步求解線性系統 $J(\mathbf{x}_n)\,\Delta\mathbf{x} = -\mathbf{F}(\mathbf{x}_n)$，再更新：</p>
-    <p>$$\mathbf{x}_{n+1} = \mathbf{x}_n + \Delta\mathbf{x}$$</p>
-    <p>對 $2\times2$ 系統，可直接用 Cramer 法則，行列式 $\det J = ad - bc$：</p>
-    <p>$$\Delta x = \frac{-(d\,f_1 - b\,f_2)}{\det J}, \quad \Delta y = \frac{-(-c\,f_1 + a\,f_2)}{\det J}$$</p>
-    <p>當 $J$ 在根附近非奇異時，仍保有二階收斂：$\|\mathbf{e}_{n+1}\| \leq C\|\mathbf{e}_n\|^2$。</p>
+    <p>要找兩個曲面同時與 $z=0$ 平面相交的點，我們求解<strong>非線性方程組</strong> $\\mathbf{F}(\\mathbf{x}) = \\mathbf{0}$，其中 $\\mathbf{x} = (x, y)^T$。</p>
+    <p>純量導數在這裡被推廣為 <strong>Jacobian 矩陣</strong>——所有偏導數組成的表格：</p>
+    <p>$$J = \\begin{bmatrix} \\partial f_1/\\partial x & \\partial f_1/\\partial y \\\\ \\partial f_2/\\partial x & \\partial f_2/\\partial y \\end{bmatrix}$$</p>
+    <p>每一步回答：<em>「哪個方向能同時讓 $f_1$ 和 $f_2$ 趨向零？」</em>求解 $J\\,\\Delta\\mathbf{x} = -\\mathbf{F}$，再更新：</p>
+    <p>$$\\mathbf{x}_{n+1} = \\mathbf{x}_n + \\Delta\\mathbf{x}$$</p>
+    <p>對 $2 \\times 2$ 系統，利用 <strong>Cramer 法則</strong>（$\\det J = ad - bc$）直接求解：</p>
+    <p>$$\\Delta x = \\frac{-(d\\,f_1 - b\\,f_2)}{\\det J}, \\qquad \\Delta y = \\frac{-(-c\\,f_1 + a\\,f_2)}{\\det J}$$</p>
+    <p>只要 $J$ 在根附近非奇異，收斂速度仍是<strong>二階</strong>——每步正確位數大約加倍。</p>
     <pre><code class="language-js">// 2×2 牛頓步（Cramer 法則）
 const [[a,b],[c,d]] = J([x,y]);
 const det = a*d - b*c;
