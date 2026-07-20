@@ -762,8 +762,12 @@ btnReset.addEventListener('click', resetAll);
 const MODAL_COPY_2D = {
   en: `
     <p>Newton's method finds a root of $f(x) = 0$ by linearising the function at each iterate.</p>
-    <p>Given $x_n$, draw the tangent to the curve at $(x_n,\\, f(x_n))$:</p>
+    <p><strong>Foundation: point-slope form.</strong> Any line's slope is $\\Delta y / \\Delta x$:</p>
+    <p>$$m = \\frac{y - y_0}{x - x_0} \\;\\Longrightarrow\\; y - y_0 = m(x - x_0)$$</p>
+    <p>Knowing one point $(x_0, y_0)$ on a line and its slope $m$ fully determines the line — this is the same "point-slope form" from high-school geometry.</p>
+    <p>The tangent line is just this formula with three slots filled in: the point is $(x_n,\\, f(x_n))$, and the slope is $f'(x_n)$ — the derivative <em>is</em>, by definition, the slope of the tangent at that point:</p>
     <p>$$y - f(x_n) = f'(x_n)(x - x_n)$$</p>
+    <p>Equivalently, this is the first-order Taylor expansion of $f$ around $x_n$: $f(x) \\approx f(x_n) + f'(x_n)(x - x_n)$. Newton's method replaces the curve with this local straight-line approximation, then asks where <em>that line</em> crosses zero.</p>
     <p>Set $y = 0$ and solve for the next iterate:</p>
     <p>$$x_{n+1} = x_n - \\frac{f(x_n)}{f'(x_n)}$$</p>
     <p>Under good conditions the error satisfies $|e_{n+1}| \\leq C|e_n|^2$, giving <strong>quadratic convergence</strong>. Rows highlighted in the table show steps where $|\\Delta x|$ roughly squares itself.</p>
@@ -774,8 +778,12 @@ x = x + dx;</code></pre>
   `,
   zhTW: `
     <p>牛頓法透過在每個迭代點將函數<strong>線性化</strong>，來尋找 $f(x) = 0$ 的根。</p>
-    <p>給定 $x_n$，在曲線上的點 $(x_n,\\, f(x_n))$ 畫切線：</p>
+    <p><strong>基礎：點斜式（Point-Slope Form）。</strong>平面上任一直線的斜率定義為 $y$ 的變化量除以 $x$ 的變化量：</p>
+    <p>$$m = \\frac{y - y_0}{x - x_0} \\;\\Longrightarrow\\; y - y_0 = m(x - x_0)$$</p>
+    <p>只要知道直線上一點 $(x_0, y_0)$ 與斜率 $m$，就能完整寫出這條線——這正是國高中學過的「點斜式」。</p>
+    <p>切線公式其實就是把這三要素代進去：已知點是 $(x_n,\\, f(x_n))$，斜率則是 $f'(x_n)$——導數的定義本身就是該點切線的斜率：</p>
     <p>$$y - f(x_n) = f'(x_n)(x - x_n)$$</p>
+    <p>換個角度看，這也是 $f$ 在 $x_n$ 附近的一階泰勒展開（線性近似）：$f(x) \\approx f(x_n) + f'(x_n)(x - x_n)$。牛頓法的本質，就是用這條簡單的近似直線暫時取代複雜的曲線，再去解這條直線何時等於零。</p>
     <p>令 $y = 0$，解出下一個迭代點：</p>
     <p>$$x_{n+1} = x_n - \\frac{f(x_n)}{f'(x_n)}$$</p>
     <p>在良好條件下，誤差滿足 $|e_{n+1}| \\leq C|e_n|^2$，即<strong>二階收斂</strong>。表格中高亮的行代表 $|\\Delta x|$ 近似自乘縮小的步驟，這就是牛頓法比梯度下降快的原因。</p>
