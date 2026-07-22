@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Newton Method Visualizer</title>
+  <title>Newton Root-Finding Visualizer</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍎%3C/text%3E%3C/svg%3E" />
 
   <!-- KaTeX -->
@@ -443,10 +443,10 @@
   </a>
 
   <header>
-    <h1>Newton Method Visualizer</h1>
+    <h1>Newton Root-Finding Visualizer</h1>
     <div class="header-actions">
       <button class="btn" id="btn-mode" aria-label="Switch to 3D mode">3D</button>
-      <button class="btn icon" id="open-math" aria-haspopup="dialog" aria-controls="math-modal" aria-label="Math explanation">💡</button>
+      <button class="btn icon" id="open-math" aria-haspopup="dialog" aria-controls="math-modal" aria-label="Root-finding explanation">💡</button>
     </div>
   </header>
 
@@ -600,7 +600,7 @@
   <div id="math-modal" role="dialog" aria-modal="true" aria-labelledby="math-title" hidden>
     <div class="modal-panel">
       <div class="modal-header">
-        <h2 id="math-title">Math Behind the Scene</h2>
+        <h2 id="math-title">How Newton Root Finding Works</h2>
         <div class="modal-actions">
           <button class="btn" id="language-toggle">Eng / 中</button>
           <button class="btn" id="close-math" aria-label="Close">Close</button>

@@ -1,6 +1,6 @@
-# Newton Method Visualizer
+# Newton Root-Finding Visualizer
 
-An interactive visualizer for Newton's method in both **2D** (single-variable) and **3D** (two-variable system with Jacobian), built with vanilla Canvas 2D API and Three.js.
+An interactive visualizer for Newton's root-finding method in both **2D** (a single-variable equation) and **3D** (a two-variable nonlinear system with a Jacobian), built with vanilla Canvas 2D API and Three.js.
 
 **Live Demo → [jason9075.github.io/Newton-Method-Visualizer](https://jason9075.github.io/Newton-Method-Visualizer/)**
 
@@ -37,15 +37,16 @@ An interactive visualizer for Newton's method in both **2D** (single-variable) a
 
 ## Math
 
-### 2D Newton's Method
+### 2D Root Finding
 
 Given $f: \mathbb{R} \to \mathbb{R}$, the iteration is:
 
 $$x_{n+1} = x_n - \frac{f(x_n)}{f'(x_n)}$$
 
 Under suitable conditions the error satisfies $|e_{n+1}| \leq C|e_n|^2$ — quadratic convergence.
+Here, “quadratic” describes the error's convergence rate; the update itself still comes from a first-order Taylor approximation and uses only $f'$.
 
-### 3D Newton's Method (Jacobian)
+### 3D System Root Finding (Jacobian)
 
 Given $\mathbf{F}: \mathbb{R}^2 \to \mathbb{R}^2$, solve $J(\mathbf{x}_n)\,\Delta\mathbf{x} = -\mathbf{F}(\mathbf{x}_n)$:
 

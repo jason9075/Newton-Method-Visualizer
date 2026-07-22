@@ -1,4 +1,4 @@
-// Newton Method Visualizer — main.js
+// Newton Root-Finding Visualizer — main.js
 import {
   init3D, step3D, undo3D, reset3D, loadPreset3D,
   setP0_3D, resize3D, PRESETS_3D,
@@ -838,7 +838,7 @@ btnReset.addEventListener('click', resetAll);
 const MODAL_COPY_2D = {
   en: `
     <p>Newton's method finds a root of $f(x) = 0$ by linearising the function at each iterate.</p>
-    <p>To find the <strong>root</strong> (or an <strong>extremum</strong>) of a complicated nonlinear function, solving the nonlinear equation directly is often too difficult. Instead, at the current point $x_n$, we use the tangent line — the first-order Taylor expansion — as a <strong>linear approximation</strong>. We find where this simpler line equals zero, define that location as the next trial point $x_{n+1}$, and repeat the process to approach the true answer step by step.</p>
+    <p>To find a <strong>root</strong> — an input where $f(x)=0$ — of a complicated nonlinear function, solving the equation directly is often too difficult. Instead, at the current point $x_n$, we use the tangent line — the first-order Taylor expansion — as a <strong>linear approximation</strong>. We find where this simpler line crosses the x-axis, define that location as the next trial point $x_{n+1}$, and repeat to approach a root step by step.</p>
     <p><strong>Foundation: point-slope form.</strong> Any line's slope is $\\Delta y / \\Delta x$:</p>
     <p>$$m = \\frac{y - y_0}{x - x_0} \\;\\Longrightarrow\\; y - y_0 = m(x - x_0)$$</p>
     <p>Knowing one point $(x_0, y_0)$ on a line and its slope $m$ fully determines the line — this is the same "point-slope form" from high-school geometry.</p>
@@ -847,7 +847,7 @@ const MODAL_COPY_2D = {
     <p>Equivalently, this is the first-order Taylor expansion of $f$ around $x_n$: $f(x) \\approx f(x_n) + f'(x_n)(x - x_n)$. Newton's method replaces the curve with this local straight-line approximation, then asks where <em>that line</em> crosses zero.</p>
     <p>Set $y = 0$ and solve for the next iterate:</p>
     <p>$$x_{n+1} = x_n - \\frac{f(x_n)}{f'(x_n)}$$</p>
-    <p>Under good conditions the error satisfies $|e_{n+1}| \\leq C|e_n|^2$, giving <strong>quadratic convergence</strong>. Rows highlighted in the table show steps where $|\\Delta x|$ roughly squares itself.</p>
+    <p>Under good conditions the error satisfies $|e_{n+1}| \\leq C|e_n|^2$, giving <strong>quadratic convergence</strong>. Rows highlighted in the table show steps where $|\\Delta x|$ roughly squares itself. Here, “quadratic” describes the convergence rate; the update still uses a first-order Taylor approximation and only $f'$.</p>
     <p>Pathological cases include a near-zero derivative ($f'(x_n) \\approx 0$) where the tangent is almost horizontal, and oscillating functions where iteration cycles without converging.</p>
     <pre><code class="language-js">// Core update rule
 const dx = -f(x) / df(x);
@@ -855,7 +855,7 @@ x = x + dx;</code></pre>
   `,
   zhTW: `
     <p>牛頓法透過在每個迭代點將函數<strong>線性化</strong>，來尋找 $f(x) = 0$ 的根。</p>
-    <p>為了找一個複雜非線性函數的<strong>「根」</strong>（或是其<strong>「極值」</strong>），直接解非線性方程太困難，所以我們在當前的點 $x_n$ 利用切線（一階泰勒展開）做<strong>「線性近似」</strong>。我們利用這條簡單的直線算出它等於零的地方，把那個位置<strong>「定義」</strong>為下一個試探點 $x_{n+1}$，進而一步一步逼近真實答案。</p>
+    <p>函數的<strong>「根」</strong>是使 $f(x)=0$ 的輸入。複雜的非線性方程通常難以直接求解，所以我們在當前點 $x_n$ 利用切線（一階 Taylor 展開）做<strong>線性近似</strong>。找出這條直線與 x 軸的交點，將它定義為下一個試探點 $x_{n+1}$，再一步一步逼近真正的根。</p>
     <p><strong>基礎：點斜式（Point-Slope Form）。</strong>平面上任一直線的斜率定義為 $y$ 的變化量除以 $x$ 的變化量：</p>
     <p>$$m = \\frac{y - y_0}{x - x_0} \\;\\Longrightarrow\\; y - y_0 = m(x - x_0)$$</p>
     <p>只要知道直線上一點 $(x_0, y_0)$ 與斜率 $m$，就能完整寫出這條線——這正是國高中學過的「點斜式」。</p>
@@ -864,7 +864,7 @@ x = x + dx;</code></pre>
     <p>換個角度看，這也是 $f$ 在 $x_n$ 附近的一階泰勒展開（線性近似）：$f(x) \\approx f(x_n) + f'(x_n)(x - x_n)$。牛頓法的本質，就是用這條簡單的近似直線暫時取代複雜的曲線，再去解這條直線何時等於零。</p>
     <p>令 $y = 0$，解出下一個迭代點：</p>
     <p>$$x_{n+1} = x_n - \\frac{f(x_n)}{f'(x_n)}$$</p>
-    <p>在良好條件下，誤差滿足 $|e_{n+1}| \\leq C|e_n|^2$，即<strong>二階收斂</strong>。表格中高亮的行代表 $|\\Delta x|$ 近似自乘縮小的步驟，這就是牛頓法比梯度下降快的原因。</p>
+    <p>在良好條件下，誤差滿足 $|e_{n+1}| \\leq C|e_n|^2$，即<strong>二次收斂</strong>。表格中高亮的行代表 $|\\Delta x|$ 近似平方縮小的步驟；這裡的「二次」描述收斂速度，並不是使用二階 Taylor 展開。</p>
     <p>常見失效情形：導數接近零（$f'(x_n) \\approx 0$）時切線接近水平；或函數震盪導致迭代在幾個點間來回循環而不收斂。</p>
     <pre><code class="language-js">// 核心更新規則
 const dx = -f(x) / df(x);
