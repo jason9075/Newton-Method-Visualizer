@@ -128,6 +128,7 @@ let modalLang  = 'en';
 let showTangent = false;
 let showProj    = false;
 let tangentX    = null;
+let autoFitActive = false;
 
 // ── Coordinate helpers ─────────────────────────────────────────────────────────
 /** World → canvas pixel */
@@ -449,6 +450,8 @@ function triggerNextStep() {
       return;
     }
 
+    fitStepInView(x);
+    syncZoomHud();
     tangentX    = x;
     showTangent = true;
     showProj    = false;
@@ -533,6 +536,7 @@ function appendTableRow(n, x, fx, dx, prevDx) {
 function resetAll() {
   history     = [];
   clearStepVisuals();
+  autoFitActive = false;
   stopAuto();
   iterTbody.innerHTML = '';
   residualBar.style.width = '0%';
@@ -565,7 +569,57 @@ function panTo(x, y) {
   view.cx    = targetCx;
   view.cy    = targetCy;
   view.scale = targetScale;
+  fitStepInView(tangentX ?? x);
   syncZoomHud();
+}
+
+// Keep the origin, the point on the curve, and the tangent's x-intercept in
+// view. After a distant step activates auto-fit, later steps recover toward a
+// useful close-up as the iteration approaches the root again.
+function fitStepInView(x) {
+  if (!Number.isFinite(x) || canvas.width <= 0 || canvas.height <= 0) return;
+
+  const fx  = preset.f(x);
+  const dfx = preset.df(x);
+  if (!Number.isFinite(fx) || !Number.isFinite(dfx) || Math.abs(dfx) < 1e-10) return;
+
+  const xIntercept = x - fx / dfx;
+  if (!Number.isFinite(xIntercept)) return;
+
+  const points = [
+    { x: 0, y: 0 },
+    { x, y: fx },
+    { x: xIntercept, y: 0 },
+  ];
+  const padding = Math.min(64, canvas.width * 0.1, canvas.height * 0.1);
+  const isVisible = points.every((point) => {
+    const px = wx(point.x);
+    const py = wy(point.y);
+    return px >= padding && px <= canvas.width - padding
+      && py >= padding && py <= canvas.height - padding;
+  });
+
+  if (isVisible && !autoFitActive) return;
+
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  const usableWidth  = Math.max(canvas.width - padding * 2, 1);
+  const usableHeight = Math.max(canvas.height - padding * 2, 1);
+  const fitScaleX = spanX > 1e-12 ? usableWidth / spanX : Infinity;
+  const fitScaleY = spanY > 1e-12 ? usableHeight / spanY : Infinity;
+  const preferredScale = Math.abs(fx) < 0.1 ? 800 : preset.view.scale;
+  const fittedScale = Math.min(fitScaleX, fitScaleY);
+
+  view.cx = (minX + maxX) / 2;
+  view.cy = (minY + maxY) / 2;
+  view.scale = Math.min(Math.max(Math.min(fittedScale, preferredScale), SCALE_MIN), SCALE_MAX);
+  autoFitActive = view.scale < preferredScale * 0.98;
 }
 
 // ── Drag & Pan ─────────────────────────────────────────────────────────────────
@@ -622,6 +676,7 @@ canvas.addEventListener('mousemove', (e) => {
   }
 
   if (dragMode === 'pan') {
+    autoFitActive = false;
     const ddx = (e.clientX - dragStart.px) / view.scale;
     const ddy = (e.clientY - dragStart.py) / view.scale;
     view.cx   = dragStart.cx - ddx;
@@ -636,6 +691,7 @@ canvas.addEventListener('mouseleave', () => { dragMode = null; canvas.style.curs
 // Pinch / scroll to zoom, anchored at the mouse cursor position
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
+  autoFitActive = false;
   const rect   = canvas.getBoundingClientRect();
   const ex     = e.clientX - rect.left;
   const ey     = e.clientY - rect.top;
@@ -643,7 +699,7 @@ canvas.addEventListener('wheel', (e) => {
   const mx     = pw(ex);
   const my     = (canvas.height / 2 - ey) / view.scale + view.cy;
   const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-  view.scale   = Math.min(Math.max(view.scale * factor, 10), 4000);
+  view.scale   = Math.min(Math.max(view.scale * factor, SCALE_MIN), SCALE_MAX);
   // shift origin so the point under cursor stays fixed
   view.cx      = mx - (ex - canvas.width  / 2) / view.scale;
   view.cy      = my - (canvas.height / 2 - ey) / view.scale;
@@ -653,7 +709,7 @@ canvas.addEventListener('wheel', (e) => {
 
 // ── Zoom HUD ──────────────────────────────────────────────────────────────────
 // ── Zoom HUD — 2D ─────────────────────────────────────────────────────────────
-const SCALE_MIN = 10;
+const SCALE_MIN = 0.0001;
 const SCALE_MAX = 4000;
 
 function scaleToSlider(s) {
@@ -666,7 +722,8 @@ function sliderToScale(v) {
 
 function syncZoomHud() {
   zoomSlider.value = scaleToSlider(view.scale);
-  zoomLabel.textContent = `${(view.scale / 80).toFixed(1)}×`;
+  const ratio = view.scale / 80;
+  zoomLabel.textContent = `${ratio >= 0.1 ? ratio.toFixed(1) : ratio.toPrecision(2)}×`;
 }
 
 // ── Zoom HUD — 3D ─────────────────────────────────────────────────────────────
@@ -692,11 +749,12 @@ function syncZoomHud3d() {
 zoomSlider.addEventListener('input', () => {
   const v = parseInt(zoomSlider.value, 10);
   if (appMode === '2d') {
+    autoFitActive = false;
     const center = { x: view.cx, y: view.cy };
     view.scale = sliderToScale(v);
     view.cx = center.x;
     view.cy = center.y;
-    zoomLabel.textContent = `${(view.scale / 80).toFixed(1)}×`;
+    syncZoomHud();
     draw();
   } else {
     const d = sliderToDist(v);
@@ -707,6 +765,7 @@ zoomSlider.addEventListener('input', () => {
 
 function zoomStep(factor) {
   if (appMode === '2d') {
+    autoFitActive = false;
     const cx = view.cx;
     const cy = view.cy;
     view.scale = Math.min(Math.max(view.scale * factor, SCALE_MIN), SCALE_MAX);
@@ -732,6 +791,8 @@ x0Slider.addEventListener('input', (e) => {
   if (history.length === 0) {
     clearStepVisuals();
     setStatus('Ready');
+    fitStepInView(parseFloat(e.target.value));
+    syncZoomHud();
     draw();
   }
 });
