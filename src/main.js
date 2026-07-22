@@ -122,11 +122,12 @@ let view = { cx: 1.5, cy: 0, scale: 80 };
 
 let preset     = PRESETS.sqrt2;
 let history    = [];   // [{x, fx, dx}]
-let animPhase  = 0;    // 0=idle 1=drawing-tangent 2=drawing-proj
+let stepPhase  = 0;    // 0=ready 1=tangent shown 2=projection shown
 let autoTimer  = null;
 let modalLang  = 'en';
 let showTangent = false;
 let showProj    = false;
+let tangentX    = null;
 
 // ── Coordinate helpers ─────────────────────────────────────────────────────────
 /** World → canvas pixel */
@@ -158,11 +159,11 @@ function draw() {
   drawCurve();
 
   const cur = history[history.length - 1];
-  const prev = history[history.length - 2];
+
+  if (showTangent && tangentX !== null) drawTangent({ x: tangentX });
 
   if (cur) {
-    if (showTangent || showProj) drawTangent(cur);
-    if (showProj && history.length >= 2 && prev) drawProjection(prev, cur);
+    if (showProj) drawProjection(cur);
     drawIterPoints();
     drawCurrentDot(cur.x);
   } else {
@@ -310,7 +311,7 @@ function drawTangent(point) {
   ctx.restore();
 }
 
-function drawProjection(prev, cur) {
+function drawProjection(cur) {
   // vertical line from (cur.x, 0) up to (cur.x, f(cur.x))
   const x = cur.x;
   const fy = preset.f(x);
@@ -428,45 +429,52 @@ function stepNewton() {
 }
 
 // ── Two-phase animation ────────────────────────────────────────────────────────
-function triggerNextStep() {
-  if (animPhase !== 0) return;
-
-  animPhase   = 1;
-  showTangent = true;
+function clearStepVisuals() {
+  stepPhase   = 0;
+  showTangent = false;
   showProj    = false;
-  draw();
+  tangentX    = null;
+}
 
-  setTimeout(() => {
-    // phase 2: do the actual Newton step, then draw projection
-    const ok = stepNewton();
-    if (ok) {
-      showTangent = true;
-      showProj    = true;
+function triggerNextStep() {
+  // Give the tangent its own persistent step. The following click performs
+  // the Newton update and leaves the projection visible until the next click.
+  if (stepPhase !== 1) {
+    const x = currentX();
+    if (Math.abs(preset.df(x)) < 1e-10) {
+      setStatus('⚠ f\'(x) ≈ 0 — zero derivative, cannot step.', 'warn');
+      stopAuto();
+      clearStepVisuals();
       draw();
-
-      setTimeout(() => {
-        showTangent = false;
-        showProj    = false;
-        animPhase   = 0;
-        draw();
-      }, 600);
-    } else {
-      showTangent = false;
-      showProj    = false;
-      animPhase   = 0;
-      draw();
+      return;
     }
-  }, 500);
+
+    tangentX    = x;
+    showTangent = true;
+    showProj    = false;
+    stepPhase   = 1;
+    setStatus(`Tangent at x${history.length} = ${x.toPrecision(6)} — press Next Step to project.`);
+    draw();
+    return;
+  }
+
+  const ok = stepNewton();
+  if (!ok) {
+    clearStepVisuals();
+    draw();
+    return;
+  }
+
+  showProj  = true;
+  stepPhase = 2;
+  draw();
 }
 
 // ── Auto-play ─────────────────────────────────────────────────────────────────
 function startAuto() {
   if (autoTimer) return;
   btnAuto.textContent = '⏸ Pause';
-  autoTimer = setInterval(() => {
-    if (animPhase !== 0) return;
-    triggerNextStep();
-  }, 1100);
+  autoTimer = setInterval(triggerNextStep, 1100);
 }
 
 function stopAuto() {
@@ -524,9 +532,7 @@ function appendTableRow(n, x, fx, dx, prevDx) {
 
 function resetAll() {
   history     = [];
-  showTangent = false;
-  showProj    = false;
-  animPhase   = 0;
+  clearStepVisuals();
   stopAuto();
   iterTbody.innerHTML = '';
   residualBar.style.width = '0%';
@@ -610,12 +616,9 @@ canvas.addEventListener('mousemove', (e) => {
     x0Slider.value            = clamped;
     x0Display.textContent     = clamped.toFixed(2);
 
-    // live tangent preview without mutating real history
-    showTangent = true;
-    history = [{ x: clamped, fx: preset.f(clamped), dx: 0 }];
+    // live tangent preview without mutating the iteration state
     draw();
-    history     = [];
-    showTangent = false;
+    drawTangent({ x: clamped });
   }
 
   if (dragMode === 'pan') {
@@ -726,7 +729,11 @@ fnSelect.addEventListener('change', (e) => loadPreset(e.target.value));
 
 x0Slider.addEventListener('input', (e) => {
   x0Display.textContent = parseFloat(e.target.value).toFixed(2);
-  if (history.length === 0) draw();
+  if (history.length === 0) {
+    clearStepVisuals();
+    setStatus('Ready');
+    draw();
+  }
 });
 
 btnNext.addEventListener('click', triggerNextStep);
@@ -737,6 +744,15 @@ btnAuto.addEventListener('click', () => {
 });
 
 btnUndo.addEventListener('click', () => {
+  stopAuto();
+  if (stepPhase === 1) {
+    clearStepVisuals();
+    const cur = history[history.length - 1];
+    if (cur) updateStatus(cur.x, cur.fx);
+    else setStatus('Ready');
+    draw();
+    return;
+  }
   if (history.length === 0) return;
   history.pop();
   iterTbody.querySelector('tr')?.remove();
@@ -751,8 +767,7 @@ btnUndo.addEventListener('click', () => {
     setStatus('Ready');
   }
   divergeBanner.classList.remove('visible');
-  showTangent = false;
-  showProj    = false;
+  clearStepVisuals();
   draw();
 });
 
@@ -762,6 +777,7 @@ btnReset.addEventListener('click', resetAll);
 const MODAL_COPY_2D = {
   en: `
     <p>Newton's method finds a root of $f(x) = 0$ by linearising the function at each iterate.</p>
+    <p>To find the <strong>root</strong> (or an <strong>extremum</strong>) of a complicated nonlinear function, solving the nonlinear equation directly is often too difficult. Instead, at the current point $x_n$, we use the tangent line — the first-order Taylor expansion — as a <strong>linear approximation</strong>. We find where this simpler line equals zero, define that location as the next trial point $x_{n+1}$, and repeat the process to approach the true answer step by step.</p>
     <p><strong>Foundation: point-slope form.</strong> Any line's slope is $\\Delta y / \\Delta x$:</p>
     <p>$$m = \\frac{y - y_0}{x - x_0} \\;\\Longrightarrow\\; y - y_0 = m(x - x_0)$$</p>
     <p>Knowing one point $(x_0, y_0)$ on a line and its slope $m$ fully determines the line — this is the same "point-slope form" from high-school geometry.</p>
@@ -778,6 +794,7 @@ x = x + dx;</code></pre>
   `,
   zhTW: `
     <p>牛頓法透過在每個迭代點將函數<strong>線性化</strong>，來尋找 $f(x) = 0$ 的根。</p>
+    <p>為了找一個複雜非線性函數的<strong>「根」</strong>（或是其<strong>「極值」</strong>），直接解非線性方程太困難，所以我們在當前的點 $x_n$ 利用切線（一階泰勒展開）做<strong>「線性近似」</strong>。我們利用這條簡單的直線算出它等於零的地方，把那個位置<strong>「定義」</strong>為下一個試探點 $x_{n+1}$，進而一步一步逼近真實答案。</p>
     <p><strong>基礎：點斜式（Point-Slope Form）。</strong>平面上任一直線的斜率定義為 $y$ 的變化量除以 $x$ 的變化量：</p>
     <p>$$m = \\frac{y - y_0}{x - x_0} \\;\\Longrightarrow\\; y - y_0 = m(x - x_0)$$</p>
     <p>只要知道直線上一點 $(x_0, y_0)$ 與斜率 $m$，就能完整寫出這條線——這正是國高中學過的「點斜式」。</p>
