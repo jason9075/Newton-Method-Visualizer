@@ -5,33 +5,63 @@ const NORD = {
   bg:    0x2E3440,
   surf1: 0x5E81AC,
   surf2: 0xBF616A,
+  overlap: 0xB48EAD,
   path:  0xEBCB8B,
   point: 0xA3BE8C,
 };
 
-export const PRESETS_3D = {
-  circles: {
-    label: 'Circles — x²+y²=4, xy=1',
-    F:   ([x, y]) => [x * x + y * y - 4, x * y - 1],
-    J:   ([x, y]) => [[2 * x, 2 * y], [y, x]],
-    p0:  [1.5, 0.5],
+export const FUNCTIONS_3D = {
+  circle: {
+    label: 'Circle — x² + y² − 4',
+    f: ([x, y]) => x * x + y * y - 4,
+    grad: ([x, y]) => [2 * x, 2 * y],
     domain: 2.8,
   },
-  nonlinear: {
-    label: 'Nonlinear — x²−y=1, x+y²=1',
-    F:   ([x, y]) => [x * x - y - 1, x + y * y - 1],
-    J:   ([x, y]) => [[2 * x, -1], [1, 2 * y]],
-    p0:  [0.8, 0.3],
+  product: {
+    label: 'Hyperbola — xy − 1',
+    f: ([x, y]) => x * y - 1,
+    grad: ([x, y]) => [y, x],
+    domain: 2.8,
+  },
+  xParabola: {
+    label: 'X parabola — x² − y − 1',
+    f: ([x, y]) => x * x - y - 1,
+    grad: ([x]) => [2 * x, -1],
     domain: 2.0,
   },
-  mixed: {
-    label: 'Mixed — sin(x)+y=0.5, x−cos(y)=0',
-    F:   ([x, y]) => [Math.sin(x) + y - 0.5, x - Math.cos(y)],
-    J:   ([x, y]) => [[Math.cos(x), 1], [1, Math.sin(y)]],
-    p0:  [0.5, 0.2],
+  yParabola: {
+    label: 'Y parabola — x + y² − 1',
+    f: ([x, y]) => x + y * y - 1,
+    grad: ([, y]) => [1, 2 * y],
+    domain: 2.0,
+  },
+  sine: {
+    label: 'Sine — sin(x) + y − 0.5',
+    f: ([x, y]) => Math.sin(x) + y - 0.5,
+    grad: ([x]) => [Math.cos(x), 1],
+    domain: 2.5,
+  },
+  cosine: {
+    label: 'Cosine — x − cos(y)',
+    f: ([x, y]) => x - Math.cos(y),
+    grad: ([, y]) => [1, Math.sin(y)],
     domain: 2.5,
   },
 };
+
+function _composeSystem(blueKey, redKey) {
+  const blue = FUNCTIONS_3D[blueKey];
+  const red = FUNCTIONS_3D[redKey];
+  return {
+    blueKey,
+    redKey,
+    blue,
+    red,
+    F: (point) => [blue.f(point), red.f(point)],
+    J: (point) => [blue.grad(point), red.grad(point)],
+    domain: Math.max(blue.domain, red.domain),
+  };
+}
 
 let renderer3 = null;
 let scene3    = null;
@@ -41,9 +71,10 @@ let rafId3    = null;
 let pathObjs  = [];
 let surf1Obj  = null;
 let surf2Obj  = null;
+let overlapObj = null;
 
 export let history3d = [];
-export let preset3d  = PRESETS_3D.circles;
+export let system3d  = _composeSystem('circle', 'product');
 export let p0_3d     = [1.5, 0.5];
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -87,8 +118,8 @@ export function init3D(canvasEl) {
   })();
 }
 
-export function loadPreset3D(key, x0, y0) {
-  preset3d = PRESETS_3D[key];
+export function loadFunctions3D(blueKey, redKey, x0, y0) {
+  system3d = _composeSystem(blueKey, redKey);
   p0_3d = [x0, y0];
   history3d = [];
   _buildSurfaces();
@@ -105,8 +136,8 @@ export function setP0_3D(x0, y0) {
  */
 export function step3D() {
   const [x, y] = _current3D();
-  const F = preset3d.F([x, y]);
-  const J = preset3d.J([x, y]);
+  const F = system3d.F([x, y]);
+  const J = system3d.J([x, y]);
   const [[a, b], [c, d]] = J;
   const det = a * d - b * c;
 
@@ -122,7 +153,7 @@ export function step3D() {
     return { ok: false, err: 'diverge' };
   }
 
-  const F1 = preset3d.F([x1, y1]);
+  const F1 = system3d.F([x1, y1]);
   history3d.push({ x: x1, y: y1, F: F1, J, det });
   _rebuildPath();
   return { ok: true, data: { x: x1, y: y1, F: F1, J, det, n: history3d.length } };
@@ -137,8 +168,8 @@ export function undo3D() {
   return { x: h.x, y: h.y, F: h.F, J: h.J, det: h.det, n: history3d.length };
 }
 
-export function reset3D(key, x0, y0) {
-  if (key) preset3d = PRESETS_3D[key];
+export function reset3D(blueKey, redKey, x0, y0) {
+  if (blueKey && redKey) system3d = _composeSystem(blueKey, redKey);
   p0_3d = [x0, y0];
   history3d = [];
   _buildSurfaces();
@@ -176,16 +207,22 @@ function _current3D() {
 }
 
 function _buildSurfaces() {
-  [surf1Obj, surf2Obj].forEach(m => {
+  [surf1Obj, surf2Obj, overlapObj].forEach(m => {
     if (!m) return;
     scene3.remove(m);
     m.geometry.dispose();
     m.material.dispose();
   });
-  surf1Obj = _makeSurface(([x, y]) => preset3d.F([x, y])[0], preset3d.domain, NORD.surf1, 0.52);
-  surf2Obj = _makeSurface(([x, y]) => preset3d.F([x, y])[1], preset3d.domain, NORD.surf2, 0.52);
+  surf1Obj = _makeSurface(system3d.blue.f, system3d.domain, NORD.surf1, 0.52);
+  surf2Obj = _makeSurface(system3d.red.f, system3d.domain, NORD.surf2, 0.52);
+  overlapObj = _makeCommonRootHighlight(
+    system3d.blue.f,
+    system3d.red.f,
+    system3d.domain,
+  );
   scene3.add(surf1Obj);
   scene3.add(surf2Obj);
+  scene3.add(overlapObj);
 }
 
 function _makeSurface(fn, domain, color, opacity) {
@@ -222,6 +259,47 @@ function _makeSurface(fn, domain, color, opacity) {
   return new THREE.Mesh(geom, new THREE.MeshLambertMaterial({
     color, transparent: true, opacity,
     side: THREE.DoubleSide, depthWrite: false,
+  }));
+}
+
+function _makeCommonRootHighlight(blueFn, redFn, domain) {
+  const N = 90;
+  const tolerance = Math.max(0.18, domain * 0.075);
+  const positions = [];
+  const colors = [];
+  const overlapColor = new THREE.Color(NORD.overlap);
+
+  for (let i = 0; i <= N; i++) {
+    const x = -domain + (2 * domain * i) / N;
+    for (let j = 0; j <= N; j++) {
+      const y = -domain + (2 * domain * j) / N;
+      const residual = Math.max(
+        Math.abs(blueFn([x, y])),
+        Math.abs(redFn([x, y])),
+      );
+      if (residual > tolerance) continue;
+
+      const strength = 1 - residual / tolerance;
+      positions.push(x, 0.035, y);
+      colors.push(
+        overlapColor.r * (0.55 + 0.45 * strength),
+        overlapColor.g * (0.55 + 0.45 * strength),
+        overlapColor.b * (0.55 + 0.45 * strength),
+      );
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+  return new THREE.Points(geometry, new THREE.PointsMaterial({
+    size: domain * 0.035,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
   }));
 }
 

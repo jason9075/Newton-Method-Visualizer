@@ -21,11 +21,12 @@ An interactive visualizer for Newton's root-finding method in both **2D** (a sin
 
 ### 3D Mode (Jacobian Newton)
 - Solves a 2×2 nonlinear system $\mathbf{F}(\mathbf{x}) = \mathbf{0}$ using the Jacobian matrix
+- Blue and red equations can be selected independently from 6 scalar-function presets
 - Two semi-transparent surfaces $z = f_1(x,y)$ and $z = f_2(x,y)$ rendered in Three.js
+- Purple samples on the $z=0$ plane highlight regions where both residuals are near zero
 - Iteration path shown as a yellow dot trail on the $z = 0$ plane
 - Live Jacobian matrix display and $\det J$ at each step
 - OrbitControls: drag to rotate, scroll or HUD slider to zoom
-- 3 built-in systems: Circles, Nonlinear, Mixed trig
 
 ### Shared UI
 - 💡 Math modal with LaTeX (KaTeX) — content switches between 2D and 3D explanations

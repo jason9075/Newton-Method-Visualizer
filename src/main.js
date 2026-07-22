@@ -1,7 +1,7 @@
 // Newton Root-Finding Visualizer — main.js
 import {
-  init3D, step3D, undo3D, reset3D, loadPreset3D,
-  setP0_3D, resize3D, PRESETS_3D,
+  init3D, step3D, undo3D, reset3D, loadFunctions3D,
+  setP0_3D, resize3D,
   getCamDist, setCamDist, onControlsChange,
 } from './scene3d.js';
 
@@ -36,9 +36,11 @@ const btnZoomOut     = document.getElementById('btn-zoom-out');
 const btnMode        = document.getElementById('btn-mode');
 const canvas3d       = document.getElementById('canvas-3d');
 const zoomHud        = document.getElementById('zoom-hud');
+const rootZoneLegend = document.getElementById('root-zone-legend');
 const panel2dContent = document.getElementById('panel-2d-content');
 const panel3dContent = document.getElementById('panel-3d-content');
-const fnSelect3d     = document.getElementById('fn-select-3d');
+const fnSelectBlue3d = document.getElementById('fn-select-blue-3d');
+const fnSelectRed3d  = document.getElementById('fn-select-red-3d');
 const x03dSlider     = document.getElementById('x0-3d-slider');
 const y03dSlider     = document.getElementById('y0-3d-slider');
 const x03dDisplay    = document.getElementById('x0-3d-display');
@@ -874,7 +876,8 @@ x = x + dx;</code></pre>
 
 const MODAL_COPY_3D = {
   en: `
-    <p>To find where two surfaces intersect the $z=0$ plane simultaneously, we solve the <strong>nonlinear system</strong> $\\mathbf{F}(\\mathbf{x}) = \\mathbf{0}$, where $\\mathbf{x} = (x, y)^T$.</p>
+    <p>Choose the blue equation $f_1(x,y)=0$ and red equation $f_2(x,y)=0$ independently. To find where both surfaces meet the $z=0$ plane simultaneously, we solve the <strong>nonlinear system</strong> $\\mathbf{F}(\\mathbf{x}) = \\mathbf{0}$, where $\\mathbf{x} = (x, y)^T$.</p>
+    <p>The purple samples on the ground plane highlight the <strong>common-zero zone</strong>, where both $|f_1|$ and $|f_2|$ are small. This is the region relevant to root finding; an intersection of the two surfaces away from $z=0$ is not a root.</p>
     <p>Instead of a scalar derivative, Newton's method now uses the <strong>Jacobian matrix</strong> — a table of all partial derivatives:</p>
     <p>$$J = \\begin{bmatrix} \\partial f_1/\\partial x & \\partial f_1/\\partial y \\\\ \\partial f_2/\\partial x & \\partial f_2/\\partial y \\end{bmatrix}$$</p>
     <p>Each step asks: <em>"which direction moves both $f_1$ and $f_2$ toward zero?"</em> It solves $J\\,\\Delta\\mathbf{x} = -\\mathbf{F}$, then updates:</p>
@@ -889,7 +892,8 @@ const dx  = -(d*F[0] - b*F[1]) / det;
 const dy  = -(-c*F[0] + a*F[1]) / det;</code></pre>
   `,
   zhTW: `
-    <p>要找兩個曲面同時與 $z=0$ 平面相交的點，我們求解<strong>非線性方程組</strong> $\\mathbf{F}(\\mathbf{x}) = \\mathbf{0}$，其中 $\\mathbf{x} = (x, y)^T$。</p>
+    <p>藍色方程 $f_1(x,y)=0$ 與紅色方程 $f_2(x,y)=0$ 可以獨立選擇。要找兩個曲面同時與 $z=0$ 平面相交的點，我們求解<strong>非線性方程組</strong> $\\mathbf{F}(\\mathbf{x}) = \\mathbf{0}$，其中 $\\mathbf{x} = (x, y)^T$。</p>
+    <p>地面上的紫色取樣點會高亮<strong>共同接近零的區域</strong>，也就是 $|f_1|$ 與 $|f_2|$ 都很小的位置。這才是求根關心的區域；兩曲面若在非零高度相交，並不代表找到共同根。</p>
     <p>純量導數在這裡被推廣為 <strong>Jacobian 矩陣</strong>——所有偏導數組成的表格：</p>
     <p>$$J = \\begin{bmatrix} \\partial f_1/\\partial x & \\partial f_1/\\partial y \\\\ \\partial f_2/\\partial x & \\partial f_2/\\partial y \\end{bmatrix}$$</p>
     <p>每一步回答：<em>「哪個方向能同時讓 $f_1$ 和 $f_2$ 趨向零？」</em>求解 $J\\,\\Delta\\mathbf{x} = -\\mathbf{F}$，再更新：</p>
@@ -1036,6 +1040,7 @@ function switchMode(mode) {
   // canvas visibility
   canvas.style.display   = is3d ? 'none' : 'block';
   canvas3d.style.display = is3d ? 'block' : 'none';
+  rootZoneLegend.hidden  = !is3d;
 
   // panel content
   panel2dContent.hidden = is3d;
@@ -1050,12 +1055,14 @@ function switchMode(mode) {
     // Slight delay so canvas-3d has proper dimensions after becoming visible
     requestAnimationFrame(() => {
       init3D(canvas3d);
-      loadPreset3D(
-        fnSelect3d.value,
+      loadFunctions3D(
+        fnSelectBlue3d.value,
+        fnSelectRed3d.value,
         parseFloat(x03dSlider.value),
         parseFloat(y03dSlider.value),
       );
       resetPanel3d();
+      showDuplicateEquationWarning();
       onControlsChange(syncZoomHud3d);
       syncZoomHud3d();
     });
@@ -1070,15 +1077,25 @@ function switchMode(mode) {
 btnMode.addEventListener('click', () => switchMode(appMode === '2d' ? '3d' : '2d'));
 
 // ── 3D control wiring ─────────────────────────────────────────────────────────
-fnSelect3d.addEventListener('change', () => {
-  const preset = PRESETS_3D[fnSelect3d.value];
-  x03dSlider.value = preset.p0[0];
-  y03dSlider.value = preset.p0[1];
-  x03dDisplay.textContent = preset.p0[0].toFixed(2);
-  y03dDisplay.textContent = preset.p0[1].toFixed(2);
-  reset3D(fnSelect3d.value, preset.p0[0], preset.p0[1]);
+function showDuplicateEquationWarning() {
+  if (fnSelectBlue3d.value !== fnSelectRed3d.value) return;
+  setStatus3d('⚠ Identical equations make the Jacobian singular; choose two different equations.', 'warn');
+}
+
+function handleFunctionPairChange() {
+  stopAuto3D();
+  reset3D(
+    fnSelectBlue3d.value,
+    fnSelectRed3d.value,
+    parseFloat(x03dSlider.value),
+    parseFloat(y03dSlider.value),
+  );
   resetPanel3d();
-});
+  showDuplicateEquationWarning();
+}
+
+fnSelectBlue3d.addEventListener('change', handleFunctionPairChange);
+fnSelectRed3d.addEventListener('change', handleFunctionPairChange);
 
 x03dSlider.addEventListener('input', () => {
   const v = parseFloat(x03dSlider.value);
@@ -1113,9 +1130,7 @@ btnUndo3d.addEventListener('click', () => {
 });
 
 btnReset3d.addEventListener('click', () => {
-  stopAuto3D();
-  reset3D(fnSelect3d.value, parseFloat(x03dSlider.value), parseFloat(y03dSlider.value));
-  resetPanel3d();
+  handleFunctionPairChange();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
